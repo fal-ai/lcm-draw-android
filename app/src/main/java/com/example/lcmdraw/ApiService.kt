@@ -1,46 +1,64 @@
 package com.example.lcmdraw
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.Body
-import retrofit2.http.POST
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
+import ai.fal.falclient.*
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import kotlinx.coroutines.delay
 
-data class ImageRequest(val image_url: String, val prompt: String)
-data class ImageItem(val url: String)
-data class ImageResponse(val images: List<ImageItem>)
 
 class ApiService {
+    private val app = "110602490-lcm-sd15-i2i"
+    private val authKey = BuildConfig.FAL_KEY
 
-    interface FalApi {
-        @POST("/")
-        suspend fun sendImage(@Body request: ImageRequest): ImageResponse
-    }
-    private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+    private var webSocketConnection: WebSocketConnection? = null
+
+    var onImageReceived: ((String) -> Unit)? = null
+
+    private val onMessage: (String) -> Unit = { message ->
+        println("Received message: $message")
+
+        val jsonObject = JsonParser().parse(message).asJsonObject
+        val images = jsonObject.getAsJsonArray("images")
+        val url = images[0].asJsonObject.get("url").asString
+
+        onImageReceived?.invoke(url)
     }
 
-    private val client = OkHttpClient.Builder()
-        .addInterceptor(logging)
-        .addInterceptor { chain ->
-            val newRequest = chain.request().newBuilder()
-                .addHeader("Authorization", "Key ${BuildConfig.FAL_KEY}")
-                .build()
-            chain.proceed(newRequest)
+    private val onError: (Throwable) -> Unit = { error ->
+        println("Error occurred: ${error.message}")
+    }
+
+    suspend fun sendImage(base64: String) {
+        // Define the input parameters for the function
+        val inputMap = hashMapOf(
+            "prompt" to "a green ribbon in the sky",
+            "image_url" to base64,
+            "seed" to 6252023,
+            "sync_mode" to 1,
+            "strength" to 0.8,
+            "num_inference_steps" to 4,
+        )
+
+        // Check if the connection is already open
+        if (webSocketConnection?.isConnected() == true) {
+            // Use the existing connection
+            webSocketConnection?.send(Gson().toJson(inputMap))
+        } else {
+            // Open a new connection
+            webSocketConnection = WebSocketConnection(app, onMessage, onError)
+            webSocketConnection?.connect(authKey)
+
+            while(!webSocketConnection?.isConnected()!!) {
+                delay(100)
+            }
+
+            webSocketConnection?.send(Gson().toJson(inputMap))
         }
-        .build()
 
-    private val retrofit = Retrofit.Builder()
-        .baseUrl("https://110602490-lcm-sd15-i2i.gateway.alpha.fal.ai/")
-        .addConverterFactory(GsonConverterFactory.create())
-        .client(client)
-        .build()
-
-    private val api = retrofit.create(FalApi::class.java)
-
-    suspend fun sendImage(base64: String): String {
-        val request = ImageRequest(base64, "a green ribbon in the sky")
-        val response = api.sendImage(request)
-        return response.images.firstOrNull()?.url ?: ""
+        // Close the connection if not used within 1000ms
+        delay(1000)
+        if (webSocketConnection?.isConnected() == true) {
+            webSocketConnection?.close()
+            webSocketConnection = null
+        }
     }
 }

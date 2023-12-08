@@ -1,6 +1,5 @@
 package com.example.lcmdraw
 
-import android.R
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -9,8 +8,6 @@ import android.graphics.Path
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import android.widget.TextView
-
 
 class DrawingView(context: Context, attrs: AttributeSet) : View(context, attrs) {
 

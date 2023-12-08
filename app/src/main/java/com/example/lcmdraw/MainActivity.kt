@@ -35,19 +35,22 @@ class MainActivity : AppCompatActivity() {
             false
         }
 
-        // This is a simplified example. In a real app, you would likely want to send updates to the API less frequently
-        drawingView.onDrawListener = { bitmap ->
-            CoroutineScope(Dispatchers.IO).launch {
-                val base64 = ImageUtils.bitmapToBase64(bitmap)
-                val imageUrl = apiService.sendImage(base64)
-
-                // Make sure to update the UI on the main thread
-                runOnUiThread {
+        apiService.onImageReceived = { imageUrl ->
+            // Make sure to update the UI on the main thread
+            runOnUiThread {
+                if (!imageUrl.isNullOrEmpty()) {
                     Glide.with(this@MainActivity)
                         .load(imageUrl)
                         .placeholder(imageView.drawable)
                         .into(imageView)
                 }
+            }
+        }
+
+        drawingView.onDrawListener = { bitmap ->
+            CoroutineScope(Dispatchers.IO).launch {
+                val base64 = ImageUtils.bitmapToBase64(bitmap)
+                apiService.sendImage(base64)
             }
         }
 
